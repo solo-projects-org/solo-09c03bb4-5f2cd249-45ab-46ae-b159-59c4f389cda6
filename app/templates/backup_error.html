@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>备份失败 · 林道巡护</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1>🪓 清障队 · 数据迁移备份</h1>
+</header>
+
+<main>
+  <section class="card backup-card">
+    <h2>❌ 备份未能生成</h2>
+    <p class="backup-error">{{ reason }}</p>
+    <p class="hint">
+      为保证新站数据完整，服务器不会提供残缺的备份包。请按上述原因处理
+      （补齐缺失原照或检查 /data 读写权限、磁盘空间）后重试。
+    </p>
+    <p class="footer-link"><a href="/records">← 返回已入库记录页</a></p>
+  </section>
+</main>
+</body>
+</html>

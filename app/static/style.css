@@ -91,3 +91,27 @@ input, textarea {
 
 .footer-link { text-align: center; margin: 18px 0 30px; font-size: .9rem; }
 .footer-link a { color: #2d5a27; }
+
+.backup-card code {
+  background: #eef3e7;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: .85rem;
+}
+.backup-btn {
+  text-align: center;
+  text-decoration: none;
+  max-width: 320px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.backup-error {
+  color: #8a2b1e;
+  background: #fbe7e3;
+  border: 1px solid #e3b5ac;
+  border-radius: 6px;
+  padding: 12px;
+  margin: 10px 0;
+  font-size: .92rem;
+  word-break: break-all;
+}

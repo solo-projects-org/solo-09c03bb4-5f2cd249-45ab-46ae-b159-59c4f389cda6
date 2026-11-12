@@ -1,0 +1,20 @@
+# 新服务器恢复用：把解压后的备份目录（含 records.db 与 photos/）
+# 以绑定挂载方式挂到容器 /data。
+#
+# 用法：
+#   1. unzip patrol-backup-*.zip -d ./restored-data   # 解压出 records.db、photos/
+#   2. docker compose -f docker-compose.yml -f docker-compose.restore.yml up --build
+#
+# 注意：本覆盖文件把 web 服务的 volumes 整体替换为绑定挂载，
+# 因此同时声明空的顶层 volumes 以覆盖基础文件里的命名卷。
+# 验证迁移完成后，直接用基础文件（命名卷）继续运行即可。
+services:
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./restored-data:/data
+    restart: unless-stopped
+
+volumes: {}

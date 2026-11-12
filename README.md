@@ -14,6 +14,7 @@
 | 确认丢失，重传只入库一次 | 每笔记录保存时生成 UUID 作幂等键；`records.uuid` 唯一约束，重复提交返回 `duplicate: true` 直接确认，不重复写行、不重复存照片 |
 | 入库后才供清障队查看 | `/records` 页面只渲染 SQLite 中已确认的记录 |
 | 随附样例照片 | `app/static/sample-photo.png`（演示时无相机可点"使用样例照片"，离线也能取到） |
+| 换服务器迁移数据 | 清障页 `/records` 顶部「下载备份 ZIP」（`GET /backup`），见下方「数据迁移备份」 |
 
 ## 启动
 
@@ -41,6 +42,38 @@ SQLite 与已入库原照持久化在命名卷 `patrol-data`（容器内 `/data`
 再次补传时服务器按 UUID 判重，返回 `duplicate: true`，浏览器正常移出待传，
 SQLite 中始终只有一行。
 
+## 数据迁移备份（换服务器）
+
+林场换服务器时，数据员在**清障队查看页 `/records` 顶部**点「⬇️ 下载备份 ZIP」。
+
+**包内容与语义**
+
+- ZIP 解压后顶层就是 `records.db` 与 `photos/`，可直接作为新站容器的 `/data` 卷内容；
+- `records.db` 是一份可独立打开的 SQLite 库，表结构、记录 `id`（编号）与
+  `/photos/<文件名>` 链接全部保持不变，新站打开清障页即可查看原照；
+- **快照语义**：备份以本次请求首次读库时**已提交入库**的记录为准。旧站在打包
+  期间仍可正常接收补传（WAL 下读不阻塞写），但打包开始后新入库的记录、以及
+  尚未入库（还在浏览器待传队列里）的照片都不会进本次包；
+- **全程流式，不整包进内存**：原照按 1MB 分块读取，经有界队列（最多缓存 16 块）
+  流式写入 ZIP；临时快照库落盘在 `/data` 并在结束后清理，数据库也不整体读入内存；
+- **不出残缺包**：预检阶段逐张核对库中引用的原照（既检查存在性，也实际打开
+  验证可读），任何一张缺失、不可读，或数据库/磁盘读写失败，都在发送下载响应前
+  返回说明具体原因的错误页（HTTP 500），不会发送半成品 ZIP；流式阶段若出错则
+  该 ZIP 不写中央目录（解压必失败），绝不伪装成成功下载。
+
+**在新服务器恢复**
+
+```bash
+# 1. 解压备份，得到 restored-data/records.db 与 restored-data/photos/
+mkdir -p restored-data && unzip patrol-backup-*.zip -d restored-data
+
+# 2. 用恢复覆盖文件把该目录绑定挂载为新站 /data
+docker compose -f docker-compose.yml -f docker-compose.restore.yml up --build
+```
+
+打开新站 `http://<新服务器>:8000/records`，原编号与原照链接均可正常打开；
+此后新补传的记录编号在旧最大值之后继续递增（快照库已带 `sqlite_sequence`）。
+
 ## 本地开发（不用 Docker）
 
 ```bash
@@ -51,21 +84,23 @@ DATA_DIR=./data python3 app/app.py        # 或：gunicorn --chdir app -b 0.0.0.
 ## 目录结构
 
 ```
-├── docker-compose.yml      # 一键启动，卷持久化 /data
-├── Dockerfile              # python:3.12-slim + gunicorn
+├── docker-compose.yml         # 一键启动，命名卷持久化 /data
+├── docker-compose.restore.yml # 新服务器恢复：绑定挂载解压后的备份目录
+├── Dockerfile                 # python:3.12-slim + gunicorn
 ├── requirements.txt
 ├── app/
-│   ├── app.py              # Flask 路由 + SQLite（uuid 唯一约束幂等）
+│   ├── app.py                 # Flask 路由 + SQLite（uuid 唯一约束幂等 + 流式备份）
 │   ├── templates/
-│   │   ├── index.html      # 采集页（巡护员）
-│   │   └── records.html    # 已入库记录页（清障队）
+│   │   ├── index.html         # 采集页（巡护员）
+│   │   ├── records.html       # 已入库记录页（清障队，含备份下载入口）
+│   │   └── backup_error.html  # 备份失败原因页（不提供残缺包）
 │   └── static/
-│       ├── app.js          # IndexedDB 待传队列 + 补传逻辑
-│       ├── sw.js           # Service Worker（离线外壳缓存）
+│       ├── app.js             # IndexedDB 待传队列 + 补传逻辑
+│       ├── sw.js              # Service Worker（离线外壳缓存，不拦截 /backup）
 │       ├── style.css
-│       └── sample-photo.png# 随附样例照片
+│       └── sample-photo.png   # 随附样例照片
 └── tools/
-    └── make_sample_photo.py# 样例照片生成脚本（纯标准库）
+    └── make_sample_photo.py   # 样例照片生成脚本（纯标准库）
 ```
 
 ## API
@@ -76,3 +111,7 @@ DATA_DIR=./data python3 app/app.py        # 或：gunicorn --chdir app -b 0.0.0.
   - 重复（同一 uuid）：`{"ok": true, "duplicate": true, "id": N}` — 浏览器同样视为确认
   - 校验失败：`400 {"ok": false, "error": "..."}`
 - `GET  /photos/<file>` — 已入库原照
+- `GET  /backup` — 数据迁移备份 ZIP（流式）
+  - 成功：`200 application/zip`，附件名 `patrol-backup-<UTC时间戳>.zip`，
+    响应头 `X-Backup-Records` 为本快照记录数
+  - 原照缺失/读写失败：`500 text/html` 错误页，说明具体原因，不返回残缺包

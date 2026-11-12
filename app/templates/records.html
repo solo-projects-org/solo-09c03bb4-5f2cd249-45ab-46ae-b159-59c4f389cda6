@@ -13,6 +13,20 @@
 </header>
 
 <main>
+  <section class="card backup-card">
+    <h2>📦 数据迁移备份</h2>
+    <p class="hint">
+      下载 ZIP 备份：内含可独立打开的 <code>records.db</code> 与库中引用的全部原照，
+      解压后可直接作为新站的 <code>/data</code> 卷内容，记录编号与照片链接保持不变。
+      备份以本次请求读库时<strong>已提交入库</strong>的记录为准；打包期间旧站仍可接收补传，
+      之后新入库的记录与未入库的照片不会进包。
+    </p>
+    <a class="btn primary backup-btn" href="/backup">⬇️ 下载备份 ZIP</a>
+    <p class="hint">
+      若原照缺失或服务器读写失败，页面会说明原因且不会提供残缺的包。
+    </p>
+  </section>
+
   {% if records %}
   <table class="records-table">
     <thead>
